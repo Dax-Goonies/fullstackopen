@@ -1,7 +1,23 @@
+// Imports
 const express = require('express')
+const morgan = require('morgan')
+
+// App setup
 const app = express()
+
 // Parse incoming JSON request bodies
 app.use(express.json())
+
+// Custom token that shows request body
+morgan.token('body', (request) => {
+    if (request.method === 'POST' || request.method === 'PUT') {
+        return JSON.stringify(request.body)
+    }
+    return ''
+})
+
+// Use morgan middleware
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
 // Phonebook data
 let persons = [

@@ -1,8 +1,11 @@
-// Imports
+// Imports & Requirements
+require('dotenv').config()
 const express = require('express')
 const morgan = require('morgan')
 const cors = require('cors')
 const path = require('path')
+const mongoose = require('mongoose')
+mongoose.connect(process.env.MONGODB_URI)
 
 // App setup
 const app = express()
@@ -27,94 +30,116 @@ morgan.token('body', (request) => {
 // Use morgan middleware
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
 
-// Phonebook data
-let persons = [
-    { 
-      "id": "1",
-      "name": "Arto Hellas", 
-      "number": "040-123456"
-    },
-    { 
-      "id": "2",
-      "name": "Ada Lovelace", 
-      "number": "39-44-5323523"
-    },
-    { 
-      "id": "3",
-      "name": "Dan Abramov", 
-      "number": "12-43-234345"
-    },
-    { 
-      "id": "4",
-      "name": "Mary Poppendieck", 
-      "number": "39-23-6423122"
-    }
-]
+// Schema
+const personSchema = new mongoose.Schema({
+    name: String,
+    number: String,
+})
 
-// Step 3.1: GET all persons
+// Clean up the data using toJSON
+personSchema.set('toJSON', {
+    transform: (document, returnedObject) => {
+        returnedObject.id = returnedObject._id.toString()
+        delete returnedObject._id
+        delete returnedObject.__v
+    }
+})
+
+// Model
+const Person = mongoose.model('Person', personSchema)
+
+// Step 3.1 -> 3.14: GET all persons using DB
 app.get('/api/persons', (request, response) => {
-    response.json(persons)
+    Person.find({})
+        .then(persons => response.json(persons))
+        .catch(error => response.status(500).json({ error: 'Server error' }))
 })
 
-// Step 3.2: GET info page
+// Step 3.2 -> 3.18: GET info page
 app.get('/info', (request, response) => {
-    response.send(`
-        <p>Phonebook has info for ${persons.length} people</p>
-        <p>${new Date()}</p>    
-    `)
+    Person.find({}).then(persons => {
+        response.send(`
+            <p>Phonebook has info for ${persons.length} people</p>
+            <p>${new Date()}</p>    
+        `)
+    })
+    .catch(error => response.status(500).json({ error: 'Server error' }))
 })
 
-// Step 3.3: GET single person
+// Step 3.3 -> 3.18: GET single person
 app.get('/api/persons/:id', (request, response) => {
-    const id = request.params.id
-    const person = persons.find(person => person.id === id)
-    // Check if the id is valid
-    if (person) {
-        response.json(person)
-    } else {
-        response.status(404).end()
-    }
+    Person.findById(request.params.id)
+        .then(person => {
+            // Check if the id is valid
+            if (person) {
+                response.json(person)
+            } else {
+                response.status(404).json({ error: 'Person not found' })
+            }
+        })
+        .catch(error => response.status(400).json({ error: 'Malformatted id' }))
 })
 
-// Step 3.4: DELETE person
+// Step 3.4 -> 3.15: DELETE person
 app.delete('/api/persons/:id', (request, response) => {
-    const id = request.params.id
-    const person = persons.find(person => person.id === id)
-    // Check if the person exists before DELETE
-    if (!person) {
-        return response.status(404).json({error: 'The person you want to delete is not found'})
-    }
-
-    persons = persons.filter(person => person.id !== id)
-    response.status(204).end()
+    Person.findByIdAndDelete(request.params.id)
+        .then(result => {
+            // Check if the person exists before DELETE
+            if (!result) {
+                return response.status(404).json({ error: 'Person not found' })
+            }
+            response.status(204).end()
+        })
+        .catch(error => response.status(500).json({ error: 'Server error' }))
 })
 
-// Step 3.5 & 3.6: POST new person
+// Step 3.5 & 3.6 -> 3.14: POST new person
 app.post('/api/persons', (request, response) => {
-    const person = request.body
-
+    const body = request.body
     // Check if name or number are missing
-    if (!person.name || !person.number) {
-        return response.status(400).json({error: 'The name or number is missing.'})
+    if (!body.name || !body.number) {
+        return response.status(400).json({ error: 'Name or number missing' })
     }
     // Check if name already exists
-    const nameExists = persons.some(p => p.name.toLowerCase() === person.name.toLowerCase())
-    if (nameExists) {
-        return response.status(400).json({error: 'The name must be unique'})
+    Person.findOne({ name: body.name })
+        .then(existingPerson => {
+            if (existingPerson) {
+                return response.status(400).json({ error: 'Name must be unique' })
+            }
+            // Only if it passes validation => create new object
+            const person = new Person({
+                name: body.name,
+                number: body.number
+            })
+            // Add new person to the database
+            person.save()
+                .then(savedPerson => response.json(savedPerson))
+                .catch(error => response.status(500).json({ error: 'Server error' }))
+        })
+        .catch(error => response.status(500).json({ error: 'Server error' }))
+})
+
+// 3.17: Update Person number
+app.put('/api/persons/:id', (request, response) => {
+    const body = request.body
+    const person = {
+        name: body.name,
+        number: body.number,
     }
-    // Only if it passes validation => create new object
-    const newPerson= {
-        id: String(Math.floor(Math.random() * 100000)),
-        name: person.name,
-        number: person.number
-    }
-    // Add new person to array
-    persons = persons.concat(newPerson)
-    response.json(newPerson)
+
+    Person.findByIdAndUpdate(
+        request.params.id, person, {new : true}
+    )
+        .then(updatedPerson => {
+            response.json(updatedPerson)
+        })
+        .catch(error => {
+            response.status(400).json({error: 'Malformatted id'})
+        })
 })
 
 // Catch-all: Serve React for any non-API route
-app.get('*splat', (request, response) => {
+app.get('/{*splat}', (request, response) => {
     response.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 

@@ -1,12 +1,20 @@
 // Imports
 const express = require('express')
 const morgan = require('morgan')
+const cors = require('cors')
+const path = require('path')
 
 // App setup
 const app = express()
 
 // Parse incoming JSON request bodies
 app.use(express.json())
+
+// Middleware
+app.use(cors())
+
+// Serve React frontend from dist/
+app.use(express.static('dist'))
 
 // Custom token that shows request body
 morgan.token('body', (request) => {
@@ -105,7 +113,12 @@ app.post('/api/persons', (request, response) => {
     response.json(newPerson)
 })
 
-const PORT = 3001
+// Catch-all: Serve React for any non-API route
+app.get('*splat', (request, response) => {
+    response.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
+
+const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
 })

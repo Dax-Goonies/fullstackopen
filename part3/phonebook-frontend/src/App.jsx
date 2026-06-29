@@ -108,7 +108,6 @@ const App = () => {
                 value={newName} 
                 onChange={handleNameChange}
                 required
-                minLength={3}
                 />
         </div>
         <div>
@@ -116,7 +115,6 @@ const App = () => {
                 value={newNumber} 
                 onChange={handleNumberChange}
                 required
-                minLength={8}
                 />
         </div>
         <button type="submit">add</button>

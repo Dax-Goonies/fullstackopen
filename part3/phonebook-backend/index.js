@@ -32,8 +32,16 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms :b
 
 // Schema
 const personSchema = new mongoose.Schema({
-    name: String,
-    number: String,
+    name: {
+        type: String,
+        minLength: 3,
+        required: true,
+    },
+    number: {
+        type: String,
+        minLength: 8,
+        required: true,
+    }
 })
 
 // Clean up the data using toJSON
@@ -48,53 +56,48 @@ personSchema.set('toJSON', {
 // Model
 const Person = mongoose.model('Person', personSchema)
 
-// Step 3.1 -> 3.14: GET all persons using DB
-app.get('/api/persons', (request, response) => {
+// GET: All persons
+app.get('/api/persons', (request, response, next) => {
     Person.find({})
         .then(persons => response.json(persons))
-        .catch(error => response.status(500).json({ error: 'Server error' }))
+        .catch(error => next(error))
 })
 
-// Step 3.2 -> 3.18: GET info page
-app.get('/info', (request, response) => {
+// GET: Info page
+app.get('/info', (request, response, next) => {
     Person.find({}).then(persons => {
         response.send(`
             <p>Phonebook has info for ${persons.length} people</p>
             <p>${new Date()}</p>    
         `)
     })
-    .catch(error => response.status(500).json({ error: 'Server error' }))
+    .catch(error => next(error))
 })
 
-// Step 3.3 -> 3.18: GET single person
-app.get('/api/persons/:id', (request, response) => {
+// GET: Find single person 
+app.get('/api/persons/:id', (request, response, next) => {
     Person.findById(request.params.id)
         .then(person => {
             // Check if the id is valid
-            if (person) {
-                response.json(person)
-            } else {
-                response.status(404).json({ error: 'Person not found' })
-            }
+            if (person) response.json(person)
+            else response.status(404).json({ error: 'Person not found' })
         })
-        .catch(error => response.status(400).json({ error: 'Malformatted id' }))
+        .catch(error => next(error))
 })
 
-// Step 3.4 -> 3.15: DELETE person
-app.delete('/api/persons/:id', (request, response) => {
+// DELETE: Remove person 
+app.delete('/api/persons/:id', (request, response, next) => {
     Person.findByIdAndDelete(request.params.id)
         .then(result => {
             // Check if the person exists before DELETE
-            if (!result) {
-                return response.status(404).json({ error: 'Person not found' })
-            }
+            if (!result) return response.status(404).json({ error: 'Person not found' })
             response.status(204).end()
         })
-        .catch(error => response.status(500).json({ error: 'Server error' }))
+        .catch(error => next(error))
 })
 
-// Step 3.5 & 3.6 -> 3.14: POST new person
-app.post('/api/persons', (request, response) => {
+// POST: Add new person
+app.post('/api/persons', (request, response, next) => {
     const body = request.body
     // Check if name or number are missing
     if (!body.name || !body.number) {
@@ -114,34 +117,43 @@ app.post('/api/persons', (request, response) => {
             // Add new person to the database
             person.save()
                 .then(savedPerson => response.json(savedPerson))
-                .catch(error => response.status(500).json({ error: 'Server error' }))
+                .catch(error => next(error))
         })
-        .catch(error => response.status(500).json({ error: 'Server error' }))
+        .catch(error => next(error))
 })
 
-// 3.17: Update Person number
-app.put('/api/persons/:id', (request, response) => {
-    const body = request.body
-    const person = {
-        name: body.name,
-        number: body.number,
-    }
+// PUT: Update Person number
+app.put('/api/persons/:id', (request, response, next) => {
+    const {name, number} = request.body
 
     Person.findByIdAndUpdate(
-        request.params.id, person, {new : true}
+        request.params.id,
+        { name, number },
+        { new: true, runValidators: true }
     )
-        .then(updatedPerson => {
-            response.json(updatedPerson)
-        })
-        .catch(error => {
-            response.status(400).json({error: 'Malformatted id'})
-        })
+        .then(updatedPerson => response.json(updatedPerson))
+        .catch(error => next(error))
 })
 
 // Catch-all: Serve React for any non-API route
 app.get('/{*splat}', (request, response) => {
     response.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
+
+// Error handling
+const errorHandler = (error, request, response, next) => {
+    console.error(error.message)
+
+    if (error.name === 'CastError') {
+        return response.status(400).json({ error: 'Malformatted id' })
+    } else if (error.name === 'ValidationError') {
+        return response.status(400).json({ error: error.message })
+    }
+    next(error)
+}
+
+// Middleware Error handler
+app.use(errorHandler)
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {

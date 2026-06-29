@@ -82,6 +82,10 @@ const App = () => {
       personService.remove(id)
       .then(() => {
         setPersons(persons.filter(p => p.id !== id))
+        showMessage(`Deleted ${person.name}`)
+      })
+      .catch(error => {
+        showMessage(error.response?.data?.error || 'Error deleting person', 'error')
       })
     }
   }

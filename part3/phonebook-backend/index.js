@@ -41,6 +41,12 @@ const personSchema = new mongoose.Schema({
         type: String,
         minLength: 8,
         required: true,
+        validate: {
+            validator: function(v) {
+                return /^\d{2,3}-\d{5,}$/.test(v)
+            },
+            message: props => `${props.value} is not a valid phone number!`
+        }
     }
 })
 
@@ -152,7 +158,7 @@ const errorHandler = (error, request, response, next) => {
     next(error)
 }
 
-// Middleware Error handler
+// Middleware for error handling
 app.use(errorHandler)
 
 const PORT = process.env.PORT || 3001

@@ -107,13 +107,13 @@ const App = () => {
           name: <input 
                 value={newName} 
                 onChange={handleNameChange}
-                required />
+                />
         </div>
         <div>
           number: <input 
                 value={newNumber} 
                 onChange={handleNumberChange}
-                required />
+                />
         </div>
         <button type="submit">add</button>
       </form>

@@ -49,12 +49,14 @@ const App = () => {
           setNewName('')
           setNewNumber('')
         })
-.catch(error => {
-    console.log('status:', error.response.status)
-    console.log('data:', error.response.data)
-    console.log('message:', error.response.data.error)
-    showMessage(error.response.data.error, 'error')
-})
+        .catch(error => {
+          if (error.response.status === 404) {
+            showMessage(`Information of ${exists.name} has already been removed from server`, 'error')
+            setPersons(persons.filter(p => p.id !== exists.id))
+          } else {
+            showMessage(error.response.data.error, 'error')
+          }
+        })
       }
       return
     }

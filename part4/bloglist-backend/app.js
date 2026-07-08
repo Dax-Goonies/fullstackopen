@@ -1,11 +1,12 @@
 // Imports & Requirements
 const blogsRouter = require('./controllers/blogs')
+const loginRouter = require('./controllers/login')
+const userRouter = require('./controllers/users')
 const config = require('./utils/config')
 const express = require('express')
 const logger = require('./utils/logger')
 const middleware = require('./utils/middleware')
 const mongoose = require('mongoose')
-
 
 // App setup
 const app = express()
@@ -26,6 +27,8 @@ mongoose.connect(config.MONGODB_URI)
 app.use(express.json())
 app.use(middleware.requestLogger)
 app.use('/api/blogs', blogsRouter)
+app.use('/api/login', loginRouter)
+app.use('/api/users', userRouter)
 app.use(middleware.unknownEndpoint)
 app.use(middleware.errorHandler)
 

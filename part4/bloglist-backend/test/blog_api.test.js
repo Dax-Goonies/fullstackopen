@@ -1,11 +1,12 @@
-const { test, after, beforeEach, describe } = require('node:test')
+const { test, describe, beforeEach, after } = require('node:test')
 const assert = require('node:assert')
-const supertest = require('supertest')
-const app = require('../app')  
-const Blog = require('../models/blog')
 const mongoose = require('mongoose')
-
+const bcrypt = require('bcrypt')
+const supertest = require('supertest')
+const app = require('../app')
 const api = supertest(app)
+const Blog = require('../models/blog')
+const User = require('../models/user')
 
 const initialBlogs = [
     {
@@ -22,9 +23,28 @@ const initialBlogs = [
     }
 ]
 
+let token
+let userId
+
+// Setup before each test
 beforeEach(async () => {
-  await Blog.deleteMany({})
-  await Blog.insertMany(initialBlogs)
+    await Blog.deleteMany({})
+    await User.deleteMany({})
+
+    const passwordHash = await bcrypt.hash('salasana', 10)
+    const user = new User({ username: 'blogtestuser', name: 'Blog Test User', passwordHash })
+    const savedUser = await user.save()
+    userId = savedUser._id
+
+    const loginResponse = await api
+        .post('/api/login')
+        .send({ username: 'blogtestuser', password: 'salasana' })
+
+    token = loginResponse.body.token
+
+    const blogObjects = initialBlogs.map(blog => new Blog({ ...blog, user: userId }))
+    const promiseArray = blogObjects.map(blog => blog.save())
+    await Promise.all(promiseArray)
 })
 
 // 4.8: GET tests 
@@ -37,24 +57,23 @@ describe('GET /api/blogs', () => {
     })
 
     test('Correct number of blogs returned', async () => {
-    const response = await api.get('/api/blogs')
-    assert.strictEqual(response.body.length, initialBlogs.length)
+        const response = await api.get('/api/blogs')
+        assert.strictEqual(response.body.length, initialBlogs.length)
     })
 })
 
 // 4.9: Id field test
 describe('Blog id field', () => {
     test('Unique identifier is named id not _id', async () => {
-        await api
+        const response = await api
             .get('/api/blogs')
             .expect(200)
             .expect('Content-Type', /application\/json/)
-            .then((response) => {
-                response.body.forEach((blog) => {
-                    assert.ok(blog.id)
-                    assert.strictEqual(blog._id, undefined)
-                })
-            }) 
+
+        response.body.forEach((blog) => {
+            assert.ok(blog.id)
+            assert.strictEqual(blog._id, undefined)
+        })
     })
 })
 
@@ -70,6 +89,7 @@ describe('POST /api/blogs', () => {
 
         await api
             .post('/api/blogs')
+            .set('Authorization', `Bearer ${token}`)
             .send(newBlog)
             .expect(201)
             .expect('Content-Type', /application\/json/)
@@ -86,7 +106,7 @@ describe('POST /api/blogs', () => {
 
 // 4.11: Likes test for default value
 describe('POST /api/blogs with missing likes property', () => {
-    test('If likes property is missing, it defaults to 0', async () => {
+    test('f likes property is missing, it defaults to 0', async () => {
         const newBlog = {
             title: 'Blog Without Likes',
             author: 'John Doe',
@@ -95,6 +115,7 @@ describe('POST /api/blogs with missing likes property', () => {
 
         const response = await api
             .post('/api/blogs')
+            .set('Authorization', `Bearer ${token}`)
             .send(newBlog)
             .expect(201)
 
@@ -113,6 +134,7 @@ describe('POST /api/blogs with missing title and url', () => {
 
         await api
             .post('/api/blogs')
+            .set('Authorization', `Bearer ${token}`)
             .send(newBlog)
             .expect(400)
     })
@@ -126,6 +148,7 @@ describe('DELETE /api/blogs/:id', () => {
 
         await api
             .delete(`/api/blogs/${blogToDelete.id}`)
+            .set('Authorization', `Bearer ${token}`)
             .expect(204)
 
         const blogsAtEnd = await api.get('/api/blogs')
